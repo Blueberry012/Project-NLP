@@ -50,7 +50,10 @@ if "query_id" not in st.session_state:
 def load_data():
 
     tripadvisor = pd.read_csv("data/tripadvisor_final.csv")
-    X_train00 = pd.read_csv("data/X_train.csv")
+    part1 = pd.read_csv("data/X_train_part1.csv")
+    part2 = pd.read_csv("data/X_train_part2.csv")
+    X_train00 = pd.concat([part1, part2], ignore_index=True)
+    #X_train00 = pd.read_csv("data/X_train.csv")
     X_test00 = pd.read_csv("data/X_test.csv")
 
     return tripadvisor, X_train00, X_test00
