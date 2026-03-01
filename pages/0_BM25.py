@@ -30,7 +30,7 @@ from evaluation import (
 # =====================================================
 
 st.set_page_config(layout="wide")
-st.title("🎯 TF-IDF Recommendation System")
+st.title("🎯 BM25 Recommendation System")
 
 # =====================================================
 # Session State
