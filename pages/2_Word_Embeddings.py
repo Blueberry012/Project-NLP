@@ -255,7 +255,7 @@ def recommend_similar_place_embedding(
                 st.caption("No strong semantic match found")
             else:
                 for w1, w2, sim in matched_words:
-                    st.caption(f"{w1} ↔ {w2} ({sim:.3f})")
+                    st.caption(f"{w1}")
 
     return rec_ids
 
