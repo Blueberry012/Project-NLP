@@ -97,7 +97,7 @@ tripadvisor_meta = tripadvisor.set_index("id")
 
 
 # =====================================================
-# Load Precomputed Embeddings (FAST 🔥)
+# Load Precomputed Embeddings
 # =====================================================
 
 train_embeddings = np.load("data/train_embeddings.npy")
@@ -108,7 +108,7 @@ emb_model = gensim_interface("glove-wiki-gigaword-100")
 
 
 # =====================================================
-# Explainability (SIMPLIFIED → Just w1)
+# Explainability (Simple → Just w1)
 # =====================================================
 
 def explain_similarity_words(query_text, top_k_words=5):
@@ -203,9 +203,23 @@ test_places["display_name"] = (
 
 test_places = test_places.drop_duplicates("idplace")
 
+
+# ⭐ DEFAULT PLACE
+default_place = test_places[
+    test_places["idplace"] == 1725986
+]["display_name"].values
+
+default_index = 0
+
+if len(default_place) > 0:
+    default_index = test_places["display_name"].tolist().index(
+        default_place[0]
+    )
+
 selected_place = st.sidebar.selectbox(
     "🏨 Choose place",
-    test_places["display_name"].tolist()
+    test_places["display_name"].tolist(),
+    index=default_index
 )
 
 query_id = int(selected_place.split(" - ")[0])
