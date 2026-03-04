@@ -53,23 +53,15 @@ class gensim_interface:
         fileName = embeddingName + ".vecs"
 
         if os.path.isfile(fileName):
-            print("loading embeddings...")
-            self.loadPreparedEmbedding(embeddingName)
+            with open(fileName, "rb") as fd:
+                self.embeddingVectors = pickle.load(fd)
         else:
-            print("embedding preparation...")
-            self.embeddingPreparation(embeddingName)
+            self.embeddingVectors = gensim.downloader.load(embeddingName)
+
+            with open(fileName, "wb") as fd:
+                pickle.dump(self.embeddingVectors, fd)
 
         self.vectors = self.embeddingVectors.vectors
-
-    def embeddingPreparation(self, embeddingName):
-        self.embeddingVectors = gensim.downloader.load(embeddingName)
-
-        with open(embeddingName + ".vecs", "wb") as fd:
-            pickle.dump(self.embeddingVectors, fd)
-
-    def loadPreparedEmbedding(self, embeddingName):
-        with open(embeddingName + ".vecs", "rb") as fd:
-            self.embeddingVectors = pickle.load(fd)
 
     def isVec(self, word):
         return word in self.embeddingVectors
@@ -82,7 +74,7 @@ class gensim_interface:
 
 
 # =====================================================
-# Load Data
+# Load Data (CACHE SAFE)
 # =====================================================
 
 @st.cache_data
@@ -105,10 +97,9 @@ tripadvisor_meta = tripadvisor.set_index("id")
 
 
 # =====================================================
-# Build Model
+# Build Model (NO STREAMLIT CACHE ON MODEL OBJECTS)
 # =====================================================
 
-@st.cache_data
 def build_embedding_model(X_train02, X_test02):
 
     emb = gensim_interface("glove-wiki-gigaword-100")
@@ -116,7 +107,6 @@ def build_embedding_model(X_train02, X_test02):
     X_train02 = X_train02.reset_index(drop=True)
     X_test02 = X_test02.reset_index(drop=True)
 
-    # Document embedding
     def get_document_embedding(text, emb):
 
         words = text.split()
@@ -131,23 +121,15 @@ def build_embedding_model(X_train02, X_test02):
 
         return np.mean(vectors, axis=0)
 
-    # Train embeddings
-    train_embeddings = []
-    for text in X_train02["cleaned_review"]:
-        train_embeddings.append(
-            get_document_embedding(text, emb)
-        )
+    train_embeddings = np.array([
+        get_document_embedding(text, emb)
+        for text in X_train02["cleaned_review"]
+    ])
 
-    train_embeddings = np.array(train_embeddings)
-
-    # Test embeddings
-    test_embeddings = []
-    for text in X_test02["cleaned_review"]:
-        test_embeddings.append(
-            get_document_embedding(text, emb)
-        )
-
-    test_embeddings = np.array(test_embeddings)
+    test_embeddings = np.array([
+        get_document_embedding(text, emb)
+        for text in X_test02["cleaned_review"]
+    ])
 
     similarity_matrix = cosine_similarity(
         test_embeddings,
@@ -301,21 +283,9 @@ test_places["display_name"] = (
 
 test_places = test_places.drop_duplicates("idplace")
 
-default_place = test_places[
-    test_places["idplace"] == 1725986
-]["display_name"].values
-
-default_index = 0
-
-if len(default_place) > 0:
-    default_index = test_places["display_name"].tolist().index(
-        default_place[0]
-    )
-
 selected_place = st.sidebar.selectbox(
     "🏨 Choose place",
-    test_places["display_name"].tolist(),
-    index=default_index
+    test_places["display_name"].tolist()
 )
 
 query_id = int(selected_place.split(" - ")[0])
@@ -353,15 +323,9 @@ if st.session_state.get("run"):
 
         row = tripadvisor_meta.loc[st.session_state.query_id]
 
-        popup_text = f"""
-        🏨 {row['nom']}<br>
-        ⭐ Rating : {row['rating']}<br>
-        📍 {row['adresse'] if 'adresse' in row else ''}
-        """
-
         folium.Marker(
             [row["latitude"], row["longitude"]],
-            popup=folium.Popup(popup_text, max_width=300),
+            popup=row["nom"],
             icon=folium.Icon(color="red")
         ).add_to(m)
 
@@ -375,15 +339,9 @@ if st.session_state.get("run"):
 
         row = tripadvisor_meta.loc[rec_id]
 
-        popup_text = f"""
-        🏨 {row['nom']}<br>
-        ⭐ Rating : {row['rating']}<br>
-        📍 {row['adresse'] if 'adresse' in row else ''}
-        """
-
         folium.Marker(
             [row["latitude"], row["longitude"]],
-            popup=folium.Popup(popup_text, max_width=300),
+            popup=row["nom"],
             icon=folium.Icon(color="blue", icon="star", prefix="fa")
         ).add_to(m)
 
@@ -408,28 +366,21 @@ if st.session_state.get("run"):
 
     tripadvisor_test = tripadvisor_test.sort_values("Top")
 
-    cols = list(tripadvisor_test.columns)
-
-    if "Top" in cols:
-        cols.remove("Top")
-        cols = ["Top"] + cols
-
-    st.dataframe(tripadvisor_test[cols], use_container_width=True)
+    st.dataframe(tripadvisor_test, use_container_width=True)
 
 
     # Metrics
     st.subheader("📊 Evaluation Metrics")
 
-    st.write(f"Precision Level 1 : {evaluation_level1(X_test02,X_train02,similarity_matrix_m02,tripadvisor,top_k=5):.4f}")
-    st.write(f"Precision Level 2 : {evaluation_level2(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta,top_k=5):.4f}")
-    st.write(f"Precision Level 3 : {evaluation_level3(X_test02,X_train02,similarity_matrix_m02,tripadvisor):.4f}")
-    st.write(f"Precision Level 4 : {evaluation_level4(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta):.4f}")
-    st.write(f"Precision Level 5 : {evaluation_level5(X_test02,X_train02,similarity_matrix_m02,tripadvisor,top_k=5):.4f}")
-    st.write(f"Precision Level 6 : {evaluation_level6(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta,top_k=5):.4f}")
-    st.write(f"Precision Level 7 : {evaluation_level7(X_test02,X_train02,similarity_matrix_m02,tripadvisor):.2f}")
-    st.write(f"Precision Level 8 : {evaluation_level8(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta):.2f}")
+    st.write(f"Level1 : {evaluation_level1(X_test02,X_train02,similarity_matrix_m02,tripadvisor,top_k=5):.4f}")
+    st.write(f"Level2 : {evaluation_level2(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta,top_k=5):.4f}")
+    st.write(f"Level3 : {evaluation_level3(X_test02,X_train02,similarity_matrix_m02,tripadvisor):.4f}")
+    st.write(f"Level4 : {evaluation_level4(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta):.4f}")
+    st.write(f"Level5 : {evaluation_level5(X_test02,X_train02,similarity_matrix_m02,tripadvisor,top_k=5):.4f}")
+    st.write(f"Level6 : {evaluation_level6(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta,top_k=5):.4f}")
+    st.write(f"Level7 : {evaluation_level7(X_test02,X_train02,similarity_matrix_m02,tripadvisor):.2f}")
+    st.write(f"Level8 : {evaluation_level8(X_test02,X_train02,similarity_matrix_m02,tripadvisor_meta):.2f}")
 
 
-# Footer
 st.markdown("---")
 st.caption("Recommendation System")
