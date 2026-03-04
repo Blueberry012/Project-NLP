@@ -74,7 +74,7 @@ class gensim_interface:
 
 
 # =====================================================
-# Load Data (CACHE SAFE)
+# Load Data (FAST VERSION)
 # =====================================================
 
 @st.cache_data
@@ -97,50 +97,14 @@ tripadvisor_meta = tripadvisor.set_index("id")
 
 
 # =====================================================
-# Build Model (NO STREAMLIT CACHE ON MODEL OBJECTS)
+# Load Precomputed Embeddings (🔥 FAST PART)
 # =====================================================
 
-def build_embedding_model(X_train02, X_test02):
+train_embeddings = np.load("data/train_embeddings.npy")
+test_embeddings = np.load("data/test_embeddings.npy")
+similarity_matrix_m02 = np.load("data/similarity_matrix.npy")
 
-    emb = gensim_interface("glove-wiki-gigaword-100")
-
-    X_train02 = X_train02.reset_index(drop=True)
-    X_test02 = X_test02.reset_index(drop=True)
-
-    def get_document_embedding(text, emb):
-
-        words = text.split()
-        vectors = []
-
-        for word in words:
-            if emb.isVec(word):
-                vectors.append(emb.getVec(word))
-
-        if len(vectors) == 0:
-            return np.zeros(emb.nbDims())
-
-        return np.mean(vectors, axis=0)
-
-    train_embeddings = np.array([
-        get_document_embedding(text, emb)
-        for text in X_train02["cleaned_review"]
-    ])
-
-    test_embeddings = np.array([
-        get_document_embedding(text, emb)
-        for text in X_test02["cleaned_review"]
-    ])
-
-    similarity_matrix = cosine_similarity(
-        test_embeddings,
-        train_embeddings
-    )
-
-    return X_train02, X_test02, train_embeddings, test_embeddings, similarity_matrix, emb
-
-
-X_train02, X_test02, train_embeddings, test_embeddings, similarity_matrix_m02, emb_model = \
-    build_embedding_model(X_train02, X_test02)
+emb_model = gensim_interface("glove-wiki-gigaword-100")
 
 
 # =====================================================
@@ -196,9 +160,6 @@ def recommend_similar_place_embedding(
         X_test,
         X_train,
         sim_matrix,
-        test_embeddings,
-        train_embeddings,
-        emb,
         top_k=5,
         top_n_words=5):
 
@@ -242,20 +203,20 @@ def recommend_similar_place_embedding(
             ⭐ Similarity : {score:.3f}
             """)
 
-            st.write("🧠 Semantic matching words")
-
             matched_words = explain_similarity_words(
                 query_text,
                 similar_text,
-                emb,
+                emb_model,
                 top_k_words=top_n_words
             )
 
+            st.write("🧠 Semantic matches")
+
             if len(matched_words) == 0:
-                st.caption("No strong semantic match found")
+                st.caption("No strong semantic match")
             else:
                 for w1, w2, sim in matched_words:
-                    st.caption(f"{w1}")
+                    st.caption(f"{w1} ↔ {w2} ({sim:.3f})")
 
     return rec_ids
 
@@ -306,9 +267,6 @@ if st.session_state.get("run"):
         X_test02,
         X_train02,
         similarity_matrix_m02,
-        test_embeddings,
-        train_embeddings,
-        emb_model,
         top_k
     )
 
