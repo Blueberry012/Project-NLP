@@ -74,7 +74,7 @@ class gensim_interface:
 
 
 # =====================================================
-# Load Data (FAST VERSION)
+# Load Data
 # =====================================================
 
 @st.cache_data
@@ -97,7 +97,7 @@ tripadvisor_meta = tripadvisor.set_index("id")
 
 
 # =====================================================
-# Load Precomputed Embeddings (🔥 FAST PART)
+# Load Precomputed Embeddings (FAST 🔥)
 # =====================================================
 
 train_embeddings = np.load("data/train_embeddings.npy")
@@ -108,47 +108,14 @@ emb_model = gensim_interface("glove-wiki-gigaword-100")
 
 
 # =====================================================
-# Explainability
+# Explainability (SIMPLIFIED → Just w1)
 # =====================================================
 
-def explain_similarity_words(query_text, similar_text,
-                             emb,
-                             top_k_words=8,
-                             threshold=0.5):
+def explain_similarity_words(query_text, top_k_words=5):
 
-    query_words = list(set(query_text.split()))
-    similar_words = list(set(similar_text.split()))
+    query_words = list(set(query_text.split()))[:top_k_words]
 
-    matched_pairs = []
-
-    for w1 in query_words:
-
-        if not emb.isVec(w1):
-            continue
-
-        v1 = emb.getVec(w1)
-
-        for w2 in similar_words:
-
-            if not emb.isVec(w2):
-                continue
-
-            v2 = emb.getVec(w2)
-
-            sim = np.dot(v1, v2) / (
-                np.linalg.norm(v1) * np.linalg.norm(v2)
-            )
-
-            if sim > threshold:
-                matched_pairs.append((w1, w2, sim))
-
-    matched_pairs = sorted(
-        matched_pairs,
-        key=lambda x: x[2],
-        reverse=True
-    )
-
-    return matched_pairs[:top_k_words]
+    return [(w, "", 0) for w in query_words if emb_model.isVec(w)]
 
 
 # =====================================================
@@ -160,8 +127,7 @@ def recommend_similar_place_embedding(
         X_test,
         X_train,
         sim_matrix,
-        top_k=5,
-        top_n_words=5):
+        top_k=5):
 
     X_test_reset = X_test.reset_index(drop=True)
     X_train_reset = X_train.reset_index(drop=True)
@@ -195,28 +161,21 @@ def recommend_similar_place_embedding(
 
             score = sims[idx]
 
-            similar_text = X_train_reset.iloc[idx]["cleaned_review"]
-
             st.markdown(f"""
             **Reco {rank}**
             🏨 ID : {rec_id}
             ⭐ Similarity : {score:.3f}
             """)
 
-            matched_words = explain_similarity_words(
-                query_text,
-                similar_text,
-                emb_model,
-                top_k_words=top_n_words
-            )
+            st.write("🧠 Keywords")
 
-            st.write("🧠 Semantic matches")
+            matched_words = explain_similarity_words(query_text)
 
             if len(matched_words) == 0:
-                st.caption("No strong semantic match")
+                st.caption("No keyword found")
             else:
-                for w1, w2, sim in matched_words:
-                    st.caption(f"{w1} ↔ {w2} ({sim:.3f})")
+                for w1, _, _ in matched_words:
+                    st.caption(f"• {w1}")
 
     return rec_ids
 
